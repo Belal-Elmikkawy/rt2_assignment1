@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-#from nav_action_pkg.msg import UserCommand 
+from nav_action_pkg.msg import UserCommand 
 
 class UserInterfaceNode(Node):
     def __init__(self):
