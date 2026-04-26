@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'ui = nav_ui_pkg.ui_node:main',
+            'user_interface = nav_ui_pkg.ui_node:main',
         ],
     },
 )
