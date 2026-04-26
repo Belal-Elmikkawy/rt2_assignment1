@@ -60,6 +60,9 @@ void ActionServerComponent::execute(const std::shared_ptr<GoalHandleNavigate> go
   double k_alpha = 1.5;
   double distance_tolerance = 0.1;
 
+  bool position_reached = false;
+  double theta_tolerance = 0.05;
+
   while (rclcpp::ok()) {
     if (goal_handle->is_canceling()) {
       result->success = false;
@@ -89,23 +92,39 @@ void ActionServerComponent::execute(const std::shared_ptr<GoalHandleNavigate> go
     double delta_y = goal->y - current_y; // FIXED: "couble" to "double"
     double distance_error = std::sqrt(delta_x * delta_x + delta_y * delta_y);
 
-    double target_angle = std::atan2(delta_y, delta_x);
-    double angle_error = target_angle - current_yaw;
-
-    while (angle_error > M_PI) angle_error -= 2.0 * M_PI;
-    while (angle_error < -M_PI) angle_error += 2.0 * M_PI;
+    if (distance_error < distance_tolerance) {
+      position_reached = true;
+    }
 
     feedback->distance_to_target = distance_error;
     goal_handle->publish_feedback(feedback);
 
-    if (distance_error < distance_tolerance) {
-      break;
+    if (!position_reached) {
+      double target_angle = std::atan2(delta_y, delta_x);
+      double angle_error = target_angle - current_yaw;
+
+      while (angle_error > M_PI) angle_error -= 2.0 * M_PI;
+      while (angle_error < -M_PI) angle_error += 2.0 * M_PI;
+
+      cmd_vel_msg.linear.x = k_rho * distance_error;
+      cmd_vel_msg.angular.z = k_alpha * angle_error;
+
+      if (cmd_vel_msg.linear.x > 0.5) cmd_vel_msg.linear.x = 0.5;
+    } else {
+      // Rotate to target orientation (theta)
+      double angle_error = goal->theta - current_yaw;
+
+      while (angle_error > M_PI) angle_error -= 2.0 * M_PI;
+      while (angle_error < -M_PI) angle_error += 2.0 * M_PI;
+
+      if (std::abs(angle_error) < theta_tolerance) {
+        break; // Completely reached the target pose
+      }
+
+      cmd_vel_msg.linear.x = 0.0;
+      cmd_vel_msg.angular.z = k_alpha * angle_error;
     }
 
-    cmd_vel_msg.linear.x = k_rho * distance_error;
-    cmd_vel_msg.angular.z = k_alpha * angle_error;
-
-    if (cmd_vel_msg.linear.x > 0.5) cmd_vel_msg.linear.x = 0.5;
     if (cmd_vel_msg.angular.z > 1.0) cmd_vel_msg.angular.z = 1.0;
     if (cmd_vel_msg.angular.z < -1.0) cmd_vel_msg.angular.z = -1.0;
 

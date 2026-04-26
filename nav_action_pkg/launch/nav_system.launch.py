@@ -24,7 +24,7 @@ def generate_launch_description():
         name='nav_container',
         namespace='',
         package='rclcpp_components',
-        executable='component_container',
+        executable='component_container_mt',
         composable_node_descriptions=[
             action_server_node,
             action_client_node,

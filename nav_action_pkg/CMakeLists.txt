@@ -43,6 +43,7 @@ ament_target_dependencies(action_server_component
   geometry_msgs
   nav_msgs
 )
+add_dependencies(action_server_component "${PROJECT_NAME}__cpp")
 target_link_libraries(action_server_component "${cpp_typesupport_target}")
 
 rclcpp_components_register_node(action_server_component
@@ -62,6 +63,7 @@ ament_target_dependencies(action_client_component
   rclcpp_action
   rclcpp_components
 )
+add_dependencies(action_client_component "${PROJECT_NAME}__cpp")
 target_link_libraries(action_client_component "${cpp_typesupport_target}")
 
 rclcpp_components_register_node(action_client_component
