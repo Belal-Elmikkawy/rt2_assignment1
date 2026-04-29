@@ -5,10 +5,10 @@ namespace nav_action_pkg
 ActionClientComponent::ActionClientComponent(const rclcpp::NodeOptions & options)
 : Node("action_client_component", options)
 {
-  // 1. Create the Action Client
+  // Create the Action Client
   client_ptr_ = rclcpp_action::create_client<Navigate>(this, "navigate_robot");
 
-  // 2. Subscribe to the Python UI topic
+  // Subscribe to the Python UI topic
   ui_sub_ = this->create_subscription<nav_action_pkg::msg::UserCommand>(
     "user_command_topic", 10,
     std::bind(&ActionClientComponent::command_callback, this, std::placeholders::_1));
@@ -18,28 +18,33 @@ ActionClientComponent::ActionClientComponent(const rclcpp::NodeOptions & options
 
 void ActionClientComponent::command_callback(const nav_action_pkg::msg::UserCommand::SharedPtr msg)
 {
+  // Handle goal cancellation requests from the UI
   if (msg->is_cancel) {
     if (active_goal_handle_) {
       RCLCPP_INFO(this->get_logger(), "Sending cancel request to server...");
+      // Cancel the currently active action asynchronously
       client_ptr_->async_cancel_goal(active_goal_handle_);
-      active_goal_handle_.reset();
+      active_goal_handle_.reset(); // Clear the local reference to the goal
     } else {
       RCLCPP_WARN(this->get_logger(), "No active goal to cancel.");
     }
     return;
   }
 
+  // Preempt an existing goal if a new command arrives before the old one is finished
   if (active_goal_handle_) {
     RCLCPP_INFO(this->get_logger(), "Canceling previous goal before sending a new one...");
     client_ptr_->async_cancel_goal(active_goal_handle_);
     active_goal_handle_.reset();
   }
 
+  // Ensure the action server is ready before sending a new goal
   if (!client_ptr_->wait_for_action_server(std::chrono::seconds(2))) {
     RCLCPP_ERROR(this->get_logger(), "Action server not available! Cannot send goal.");
     return;
   }
 
+  // Construct the action goal message from the UI inputs
   auto goal_msg = Navigate::Goal();
   goal_msg.x = msg->x;
   goal_msg.y = msg->y;
@@ -47,28 +52,35 @@ void ActionClientComponent::command_callback(const nav_action_pkg::msg::UserComm
 
   RCLCPP_INFO(this->get_logger(), "Sending new goal to server: x=%.2f, y=%.2f", goal_msg.x, goal_msg.y);
 
+  // Setup callbacks to handle the server's responses asynchronously
   auto send_goal_options = rclcpp_action::Client<Navigate>::SendGoalOptions();
   send_goal_options.goal_response_callback =
     std::bind(&ActionClientComponent::goal_response_callback, this, std::placeholders::_1);
   send_goal_options.result_callback =
     std::bind(&ActionClientComponent::result_callback, this, std::placeholders::_1);
 
+  // Send the goal to the action server
   client_ptr_->async_send_goal(goal_msg, send_goal_options);
 }
 
+// Callback triggered when the server accepts or rejects the initial goal request
 void ActionClientComponent::goal_response_callback(const GoalHandleNavigate::SharedPtr & goal_handle)
 {
   if (!goal_handle) {
     RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
   } else {
     RCLCPP_INFO(this->get_logger(), "Goal accepted by server");
+    // Store the handle so we can cancel it later if necessary
     active_goal_handle_ = goal_handle;
   }
 }
 
+// Callback triggered when the goal completes (success, canceled, or aborted)
 void ActionClientComponent::result_callback(const GoalHandleNavigate::WrappedResult & result)
 {
-  active_goal_handle_.reset();
+  active_goal_handle_.reset(); // Goal is finished, clear the handle
+
+  // Log the final outcome
   switch (result.code) {
     case rclcpp_action::ResultCode::SUCCEEDED:
       RCLCPP_INFO(this->get_logger(), "SUCCESS: Robot reached the target!");
